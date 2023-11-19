@@ -1,6 +1,8 @@
 
 import { PlaywrightCrawler } from 'crawlee';
 import nodemailer from 'nodemailer';
+import { v4 as uuidv4 } from 'uuid';
+
 const FACEBOOK_USERNAME = ''
 const FACEBOOK_PASSWORD = ''
 const FACEBOOK_GROUP_ID = ''
@@ -25,13 +27,12 @@ const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 const crawler = new PlaywrightCrawler({
     async requestHandler({ request, page, enqueueLinks, log }) {
         if (request.label === "fbgroup") {
-            const title = await page.title();
-            log.info(`Title of ${request.loadedUrl} is '${title}'`);
 
             const currentName = await page.locator("//div[@role='feed']/div[2]//strong[1]/span").nth(0).textContent();
             log.info(`Current top post is from '${currentName}'`);
 
             if (previousName !== currentName) {
+                log.info(`NEW POST from ${currentName}` );
                 previousName = currentName || "";
 
                 const link = await page.locator("//div[@role='feed']/div[2]//a").nth(3).getAttribute("href");
@@ -55,10 +56,16 @@ const crawler = new PlaywrightCrawler({
                 }
 
             }
-            await delay(REFRESH_FREQUENCY * 1000 * 60)
+            
+            await delay(REFRESH_FREQUENCY * 1000 * 60);
             await enqueueLinks({
                 urls: [`http://www.facebook.com/groups/${FACEBOOK_GROUP_ID}/?sorting_setting=CHRONOLOGICAL`],
-                label: "fbgroup"
+                label: "fbgroup",
+                transformRequestFunction: (request) => {
+                    request.uniqueKey = `${request.url}:${uuidv4()}`;
+                    return request;
+                }
+                
             });
 
         } else {
@@ -79,8 +86,11 @@ const crawler = new PlaywrightCrawler({
             });
         }
     },
+    requestHandlerTimeoutSecs:REFRESH_FREQUENCY*60*5,
+    statusMessageLoggingInterval:12*60*60,
     // Uncomment this option to see the browser window.
     // headless: false,
+    
 });
-
+crawler
 await crawler.run(['http://www.facebook.com']);
